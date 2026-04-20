@@ -1,4 +1,4 @@
-import { Contract, JsonRpcProvider, ZeroAddress, getAddress, isAddress } from "ethers";
+import { Contract, JsonRpcProvider, ZeroAddress, getAddress } from "ethers";
 import { dexChainConfig } from "@/lib/chain-config";
 
 /** Target chain for this deployment (from `NEXT_PUBLIC_CHAIN_ID` / RPC env). */
@@ -73,22 +73,30 @@ export const FEATURED_TOKENS = {
     decimals: dexChainConfig.tokens.xu3o8.decimals,
     accent: "from-amber-300 to-lime-500",
   },
-  vnxau: {
-    key: "vnxau",
-    address: dexChainConfig.tokens.vnxau.address,
-    symbol: dexChainConfig.tokens.vnxau.symbol,
-    name: dexChainConfig.tokens.vnxau.name,
-    decimals: dexChainConfig.tokens.vnxau.decimals,
-    accent: "from-amber-200 to-yellow-600",
-  },
+  ...(dexChainConfig.tokens.vnxau
+    ? {
+        vnxau: {
+          key: "vnxau",
+          address: dexChainConfig.tokens.vnxau.address,
+          symbol: dexChainConfig.tokens.vnxau.symbol,
+          name: dexChainConfig.tokens.vnxau.name,
+          decimals: dexChainConfig.tokens.vnxau.decimals,
+          accent: "from-amber-200 to-yellow-600",
+        },
+      }
+    : {}),
 } as const satisfies Record<string, TokenConfig>;
 
 export const TOKENS = FEATURED_TOKENS;
 export type TokenKey = keyof typeof FEATURED_TOKENS;
 
-/** Featured row order in Trade → Swap: VNXAU, xU3O8, USDC. */
+/** Featured row order in Trade → Swap: optional VNXAU, then xU3O8, then USDC. */
 export function getFeaturedTokensOrdered(): TokenConfig[] {
-  return [FEATURED_TOKENS.vnxau, FEATURED_TOKENS.xu3o8, FEATURED_TOKENS.usdc];
+  return [
+    ...(FEATURED_TOKENS.vnxau ? [FEATURED_TOKENS.vnxau] : []),
+    FEATURED_TOKENS.xu3o8,
+    FEATURED_TOKENS.usdc,
+  ];
 }
 
 export const DEFAULT_SWAP_TOKEN_IN = FEATURED_TOKENS.usdc.key;

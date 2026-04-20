@@ -78,7 +78,7 @@ export type DexChainConfig = {
   tokens: {
     usdc: DexChainErc20Meta;
     xu3o8: DexChainErc20Meta;
-    vnxau: DexChainErc20Meta;
+    vnxau: DexChainErc20Meta | null;
   };
   /** Optional pinned pool for dashboard price + `getFeaturedPool` shortcut; omit on new chains until deployed. */
   featuredPoolAddress: `0x${string}` | null;
@@ -91,11 +91,12 @@ function buildDexChainConfig(): DexChainConfig {
   const usdcDecimals = parsePositiveIntEnv("NEXT_PUBLIC_TOKEN_USDC_DECIMALS", 6);
   const xu3o8Decimals = parsePositiveIntEnv("NEXT_PUBLIC_TOKEN_XU3O8_DECIMALS", 18);
   const vnxauDecimals = parsePositiveIntEnv("NEXT_PUBLIC_TOKEN_VNXAU_DECIMALS", 18);
-
-  const vnxauAddr =
+  const explicitVnxauAddr =
     parseOptionalAddressEnv("NEXT_PUBLIC_VNXAU_TOKEN_ADDRESS") ??
-    parseOptionalAddressEnv("NEXT_PUBLIC_TOKEN_VNXAU_ADDRESS") ??
-    (getAddress(DEFAULT_VNXAU) as `0x${string}`);
+    parseOptionalAddressEnv("NEXT_PUBLIC_TOKEN_VNXAU_ADDRESS");
+  const vnxauAddr =
+    explicitVnxauAddr ??
+    (chainId === 127124 ? (getAddress(DEFAULT_VNXAU) as `0x${string}`) : null);
 
   const explicitPool =
     parseOptionalAddressEnv("NEXT_PUBLIC_FEATURED_POOL_ADDRESS") ??
@@ -135,12 +136,14 @@ function buildDexChainConfig(): DexChainConfig {
         name: envTrim("NEXT_PUBLIC_TOKEN_XU3O8_NAME") ?? "xU3O8",
         decimals: xu3o8Decimals,
       },
-      vnxau: {
-        address: vnxauAddr,
-        symbol: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_SYMBOL") ?? "VNXAU",
-        name: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_NAME") ?? "VNX Gold",
-        decimals: vnxauDecimals,
-      },
+      vnxau: vnxauAddr
+        ? {
+            address: vnxauAddr,
+            symbol: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_SYMBOL") ?? "VNXAU",
+            name: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_NAME") ?? "VNX Gold",
+            decimals: vnxauDecimals,
+          }
+        : null,
     },
     featuredPoolAddress: featuredPool,
   };

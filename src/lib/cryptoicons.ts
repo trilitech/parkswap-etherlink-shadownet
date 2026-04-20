@@ -44,7 +44,7 @@ export function bundledAppIconIdForToken(token: BundledAppIconTokenInput): strin
   const addr = token.address?.trim();
   if (addr) {
     if (sameAddress(addr, FEATURED_TOKENS.usdc.address)) return "usdc";
-    if (sameAddress(addr, FEATURED_TOKENS.vnxau.address)) return "vnxau";
+    if (FEATURED_TOKENS.vnxau && sameAddress(addr, FEATURED_TOKENS.vnxau.address)) return "vnxau";
     if (sameAddress(addr, FEATURED_TOKENS.xu3o8.address)) return "xu3o8";
   }
   return null;
