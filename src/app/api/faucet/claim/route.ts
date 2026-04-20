@@ -12,12 +12,12 @@ function envTrim(key: string) {
   return value || undefined;
 }
 
-function requireServerEnv(key: string) {
-  const value = envTrim(key);
-  if (!value) {
-    throw new Error(`Missing required server env: ${key}`);
+function requireOneOfServerEnv(...keys: string[]) {
+  for (const key of keys) {
+    const value = envTrim(key);
+    if (value) return value;
   }
-  return value;
+  throw new Error(`Missing required server env. Set one of: ${keys.join(", ")}`);
 }
 
 function toHexPrivateKey(value: string) {
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     }
 
     const rpcUrl = envTrim("FAUCET_RPC_URL") ?? envTrim("NEXT_PUBLIC_RPC_URL") ?? TXPARK_RPC_URL;
-    const privateKey = toHexPrivateKey(requireServerEnv("FAUCET_PRIVATE_KEY"));
+    const privateKey = toHexPrivateKey(requireOneOfServerEnv("FAUCET_PRIVATE_KEY", "PRIVATE_KEY"));
 
     const provider = new JsonRpcProvider(rpcUrl);
     const wallet = new Wallet(privateKey, provider);

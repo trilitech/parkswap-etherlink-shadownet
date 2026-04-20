@@ -134,6 +134,20 @@ function formatBalance(value: bigint | null, decimals: number, fractionDigits = 
   });
 }
 
+function formatPoolMetric(value: number | null, fractionDigits = 6) {
+  if (value === null || !Number.isFinite(value) || value <= 0) return "--";
+  if (value < 10 ** -fractionDigits) return `< ${Number(10 ** -fractionDigits).toFixed(fractionDigits)}`;
+  if (value >= 1_000_000_000) {
+    return new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
 function getTokenPriceFromSqrtPrice(sqrtPriceX96: bigint) {
   const q192 = 2n ** 192n;
   const ratioX192 = sqrtPriceX96 * sqrtPriceX96;
@@ -776,18 +790,18 @@ export default function Home() {
                   <div className="rounded-[24px] bg-black/20 p-4">
                     <p className="text-sm text-white/45">USDC per {FEATURED_TOKENS.xu3o8.symbol}</p>
                     <p className="mt-2 text-3xl font-semibold">
-                      {poolState.usdcPerXu3o8 ? poolState.usdcPerXu3o8.toFixed(4) : "--"}
+                      {formatPoolMetric(poolState.usdcPerXu3o8, 4)}
                     </p>
                   </div>
                   <div className="rounded-[24px] bg-black/20 p-4">
                     <p className="text-sm text-white/45">{FEATURED_TOKENS.xu3o8.symbol} per USDC</p>
                     <p className="mt-2 text-3xl font-semibold">
-                      {poolState.xu3o8PerUsdc ? poolState.xu3o8PerUsdc.toFixed(6) : "--"}
+                      {formatPoolMetric(poolState.xu3o8PerUsdc, 6)}
                     </p>
                   </div>
                   <div className="rounded-[24px] bg-black/20 p-4">
                     <p className="text-sm text-white/45">Pool address</p>
-                    <p className="mt-2 break-all text-lg font-semibold text-white/85">
+                    <p className="mt-2 break-all font-mono text-sm font-medium leading-6 text-white/75">
                       {getDashboardPoolAddress() ?? (
                         <span className="text-white/45">Set NEXT_PUBLIC_FEATURED_POOL_ADDRESS for this chain.</span>
                       )}
