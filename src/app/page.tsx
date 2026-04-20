@@ -10,7 +10,7 @@ import { ParkSwapLogo } from "@/components/ParkSwapLogo";
 import { SwapPanel } from "@/components/SwapPanel";
 import { WalletTokenIcon } from "@/components/WalletTokenIcon";
 import { cryptoIconSvgUrl } from "@/lib/cryptoicons";
-import { ATTRIBUTION_READ_MORE_URL } from "@/lib/site-metadata";
+import { ETHERLINK_SHADOWNET_FAUCET_URL } from "@/lib/site-metadata";
 import { configurableTokenArtifact } from "@/lib/configurable-token-artifact";
 import {
   FEATURED_TOKENS,
@@ -19,7 +19,6 @@ import {
   TXPARK_RPC_URL,
   configuredNetworkMismatchMessage,
   dexChainConfig,
-  getDashboardPoolAddress,
   txparkExplorerTxUrl,
   erc20Abi,
   normalizeAddress,
@@ -43,9 +42,19 @@ type WalletState = {
 };
 
 type PoolState = {
-  usdcPerXu3o8: number | null;
-  xu3o8PerUsdc: number | null;
+  key: string;
+  label: string;
+  poolAddress: string;
+  tokenA: TokenConfig;
+  tokenB: TokenConfig;
+  primaryPrice: number | null;
+  inversePrice: number | null;
+  displayBaseSymbol: string;
+  displayQuoteSymbol: string;
+  displayPrice: number | null;
   liquidity: string | null;
+  tokenABalance: bigint | null;
+  tokenBBalance: bigint | null;
 };
 
 type DeployedTokenRecord = {
@@ -59,7 +68,10 @@ type DeployedTokenRecord = {
   txHash: string | null;
 };
 
-const publicProvider = new JsonRpcProvider(TXPARK_RPC_URL, TXPARK_CHAIN_ID);
+const publicProvider = new JsonRpcProvider(TXPARK_RPC_URL, TXPARK_CHAIN_ID, {
+  batchMaxCount: 1,
+  staticNetwork: true,
+});
 
 const DEPLOYED_TOKENS_STORAGE_KEY = "parkswap-deployed-tokens-v1";
 
@@ -136,31 +148,96 @@ function formatBalance(value: bigint | null, decimals: number, fractionDigits = 
 
 function formatPoolMetric(value: number | null, fractionDigits = 6) {
   if (value === null || !Number.isFinite(value) || value <= 0) return "--";
-  if (value < 10 ** -fractionDigits) return `< ${Number(10 ** -fractionDigits).toFixed(fractionDigits)}`;
-  if (value >= 1_000_000_000) {
-    return new Intl.NumberFormat(undefined, {
-      notation: "compact",
-      maximumFractionDigits: 2,
-    }).format(value);
+  if (value < 10 ** -fractionDigits) {
+    return `< ${Number(10 ** -fractionDigits).toFixed(fractionDigits)}`;
   }
   return value.toLocaleString(undefined, {
     maximumFractionDigits: fractionDigits,
   });
 }
 
-function getTokenPriceFromSqrtPrice(sqrtPriceX96: bigint) {
+function getPairPriceFromSqrtPrice(sqrtPriceX96: bigint, tokenA: TokenConfig, tokenB: TokenConfig) {
   const q192 = 2n ** 192n;
   const ratioX192 = sqrtPriceX96 * sqrtPriceX96;
-  const rawRatioScaled = Number((ratioX192 * 1_000_000_000_000n) / q192) / 1_000_000_000_000;
-  const xu3o8PerUsdc = rawRatioScaled * 10 ** (FEATURED_TOKENS.usdc.decimals - FEATURED_TOKENS.xu3o8.decimals);
-  if (!Number.isFinite(xu3o8PerUsdc) || xu3o8PerUsdc <= 0) {
-    return { xu3o8PerUsdc: null, usdcPerXu3o8: null };
+  const rawRatio = Number(ratioX192) / Number(q192);
+  const [token0, token1] = tokenA.address.toLowerCase() < tokenB.address.toLowerCase() ? [tokenA, tokenB] : [tokenB, tokenA];
+  const token1PerToken0 = rawRatio * 10 ** (token0.decimals - token1.decimals);
+  if (!Number.isFinite(token1PerToken0) || token1PerToken0 <= 0) {
+    return { primaryPrice: null, inversePrice: null };
   }
+
+  const tokenBPerTokenA =
+    tokenA.address.toLowerCase() === token0.address.toLowerCase() ? token1PerToken0 : 1 / token1PerToken0;
+  if (!Number.isFinite(tokenBPerTokenA) || tokenBPerTokenA <= 0) {
+    return { primaryPrice: null, inversePrice: null };
+  }
+
   return {
-    xu3o8PerUsdc,
-    usdcPerXu3o8: 1 / xu3o8PerUsdc,
+    primaryPrice: tokenBPerTokenA,
+    inversePrice: 1 / tokenBPerTokenA,
   };
 }
+
+function getReadablePoolQuote(tokenA: TokenConfig, tokenB: TokenConfig, primaryPrice: number | null, inversePrice: number | null) {
+  if (primaryPrice === null || inversePrice === null) {
+    return {
+      displayBaseSymbol: tokenB.symbol,
+      displayQuoteSymbol: tokenA.symbol,
+      displayPrice: null,
+    };
+  }
+
+  // For USDC-paired pools, show the asset price in USDC.
+  if (tokenA.symbol === "USDC") {
+    return {
+      displayBaseSymbol: tokenB.symbol,
+      displayQuoteSymbol: tokenA.symbol,
+      displayPrice: inversePrice,
+    };
+  }
+
+  if (tokenB.symbol === "USDC") {
+    return {
+      displayBaseSymbol: tokenA.symbol,
+      displayQuoteSymbol: tokenB.symbol,
+      displayPrice: primaryPrice,
+    };
+  }
+
+  if (primaryPrice >= 1 || inversePrice < 1) {
+    return {
+      displayBaseSymbol: tokenB.symbol,
+      displayQuoteSymbol: tokenA.symbol,
+      displayPrice: primaryPrice,
+    };
+  }
+
+  return {
+    displayBaseSymbol: tokenA.symbol,
+    displayQuoteSymbol: tokenB.symbol,
+    displayPrice: inversePrice,
+  };
+}
+
+const configuredPools = dexChainConfig.pools.map((pool) => ({
+  key: pool.key,
+  label: pool.label,
+  poolAddress: pool.poolAddress,
+  tokenA: {
+    key: pool.tokenA.symbol.toLowerCase(),
+    address: pool.tokenA.address,
+    symbol: pool.tokenA.symbol,
+    name: pool.tokenA.name,
+    decimals: pool.tokenA.decimals,
+  } satisfies TokenConfig,
+  tokenB: {
+    key: pool.tokenB.symbol.toLowerCase(),
+    address: pool.tokenB.address,
+    symbol: pool.tokenB.symbol,
+    name: pool.tokenB.name,
+    decimals: pool.tokenB.decimals,
+  } satisfies TokenConfig,
+}));
 
 function getReadableErrorMessage(error: unknown) {
   if (!error) {
@@ -192,19 +269,51 @@ function getReadableErrorMessage(error: unknown) {
   return message || "Something went wrong. Please try again.";
 }
 
-async function readPoolState() {
-  const poolAddr = getDashboardPoolAddress();
-  if (!poolAddr) {
-    return { usdcPerXu3o8: null, xu3o8PerUsdc: null, liquidity: null } satisfies PoolState;
+async function readPoolState(poolConfig: (typeof configuredPools)[number]) {
+  const pool = new Contract(poolConfig.poolAddress, poolAbi, publicProvider);
+  const tokenAContract = new Contract(poolConfig.tokenA.address, erc20Abi, publicProvider);
+  const tokenBContract = new Contract(poolConfig.tokenB.address, erc20Abi, publicProvider);
+  const [slot0Result, liquidityResult, tokenABalanceResult, tokenBBalanceResult] = await Promise.allSettled([
+    pool.slot0(),
+    pool.liquidity(),
+    tokenAContract.balanceOf(poolConfig.poolAddress),
+    tokenBContract.balanceOf(poolConfig.poolAddress),
+  ]);
+
+  if (slot0Result.status === "rejected") {
+    console.error(`Failed to read slot0 for ${poolConfig.label}`, slot0Result.reason);
   }
-  const pool = new Contract(poolAddr, poolAbi, publicProvider);
-  const [slot0, liquidity] = await Promise.all([pool.slot0(), pool.liquidity()]);
-  const price = getTokenPriceFromSqrtPrice(slot0.sqrtPriceX96 as bigint);
+  if (liquidityResult.status === "rejected") {
+    console.error(`Failed to read liquidity for ${poolConfig.label}`, liquidityResult.reason);
+  }
+  if (tokenABalanceResult.status === "rejected") {
+    console.error(`Failed to read ${poolConfig.tokenA.symbol} balance for ${poolConfig.label}`, tokenABalanceResult.reason);
+  }
+  if (tokenBBalanceResult.status === "rejected") {
+    console.error(`Failed to read ${poolConfig.tokenB.symbol} balance for ${poolConfig.label}`, tokenBBalanceResult.reason);
+  }
+
+  const price =
+    slot0Result.status === "fulfilled"
+      ? getPairPriceFromSqrtPrice(slot0Result.value.sqrtPriceX96 as bigint, poolConfig.tokenA, poolConfig.tokenB)
+      : { primaryPrice: null, inversePrice: null };
+  const readableQuote = getReadablePoolQuote(
+    poolConfig.tokenA,
+    poolConfig.tokenB,
+    price.primaryPrice,
+    price.inversePrice,
+  );
 
   return {
-    usdcPerXu3o8: price.usdcPerXu3o8,
-    xu3o8PerUsdc: price.xu3o8PerUsdc,
-    liquidity: liquidity.toString(),
+    ...poolConfig,
+    primaryPrice: price.primaryPrice,
+    inversePrice: price.inversePrice,
+    displayBaseSymbol: readableQuote.displayBaseSymbol,
+    displayQuoteSymbol: readableQuote.displayQuoteSymbol,
+    displayPrice: readableQuote.displayPrice,
+    liquidity: liquidityResult.status === "fulfilled" ? liquidityResult.value.toString() : null,
+    tokenABalance: tokenABalanceResult.status === "fulfilled" ? (tokenABalanceResult.value as bigint) : null,
+    tokenBBalance: tokenBBalanceResult.status === "fulfilled" ? (tokenBBalanceResult.value as bigint) : null,
   } satisfies PoolState;
 }
 
@@ -243,11 +352,7 @@ export default function Home() {
     isCorrectNetwork: false,
   });
   const [balancesByKey, setBalancesByKey] = useState<Record<string, bigint | null>>({});
-  const [poolState, setPoolState] = useState<PoolState>({
-    usdcPerXu3o8: null,
-    xu3o8PerUsdc: null,
-    liquidity: null,
-  });
+  const [poolStates, setPoolStates] = useState<PoolState[]>([]);
   const [createTokenName, setCreateTokenName] = useState("");
   const [createTokenSymbol, setCreateTokenSymbol] = useState("");
   const [createTokenDecimals, setCreateTokenDecimals] = useState("18");
@@ -313,18 +418,14 @@ export default function Home() {
 
   const refreshReadState = useCallback(async (account?: string | null) => {
     const [poolResult, balancesResult] = await Promise.allSettled([
-      readPoolState(),
+      Promise.all(configuredPools.map(readPoolState)),
       account ? readBalancesForMerged(account, mergedTokens) : Promise.resolve({} as Record<string, bigint>),
     ]);
 
     if (poolResult.status === "fulfilled") {
-      setPoolState(poolResult.value);
+      setPoolStates(poolResult.value);
     } else {
-      setPoolState({
-        usdcPerXu3o8: null,
-        xu3o8PerUsdc: null,
-        liquidity: null,
-      });
+      setPoolStates([]);
       console.error("Failed to read pool state", poolResult.reason);
     }
 
@@ -617,9 +718,9 @@ export default function Home() {
                 { key: "wallet", label: "Wallet" },
                 { key: "pool", label: "Pool" },
                 { key: "liquidity", label: "Liquidity" },
-                { key: "faucet", label: "Faucet" },
                 { key: "create", label: "Create Token" },
                 { key: "recent-tokens", label: "Recent Tokens" },
+                { key: "faucet", label: "Faucet" },
               ].map((item) => (
                 <button
                   key={item.key}
@@ -657,11 +758,17 @@ export default function Home() {
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-white/55">Network</span>
                       <span className="text-right text-xs text-white/85">
-                        {wallet.account ? getConnectedChainDisplayName(wallet.chainId) : "Not connected"}
+                        {wallet.account
+                          ? wallet.isCorrectNetwork
+                            ? dexChainConfig.networkDisplayName
+                            : wallet.chainId
+                              ? `Chain ${wallet.chainId}`
+                              : "Unknown"
+                          : "Not connected"}
                       </span>
                     </div>
                     <a
-                      href={ATTRIBUTION_READ_MORE_URL}
+                      href={ETHERLINK_SHADOWNET_FAUCET_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex w-full items-center justify-center rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/15"
@@ -782,31 +889,57 @@ export default function Home() {
             )}
 
             {activeView === "pool" && (
-              <div className="w-full max-w-[500px] rounded-[30px] bg-[#191919] p-5">
+              <div className="w-full max-w-5xl rounded-[30px] bg-[#191919] p-5">
                 <p className="text-sm text-white/55">Pool</p>
-                <h3 className="mt-1 text-xl font-semibold tracking-tight">Live pair metrics</h3>
+                <h3 className="mt-1 text-xl font-semibold tracking-tight">Configured pools</h3>
 
-                <div className="mt-5 grid gap-3">
-                  <div className="rounded-[24px] bg-black/20 p-4">
-                    <p className="text-sm text-white/45">USDC per {FEATURED_TOKENS.xu3o8.symbol}</p>
-                    <p className="mt-2 text-3xl font-semibold">
-                      {formatPoolMetric(poolState.usdcPerXu3o8, 4)}
-                    </p>
-                  </div>
-                  <div className="rounded-[24px] bg-black/20 p-4">
-                    <p className="text-sm text-white/45">{FEATURED_TOKENS.xu3o8.symbol} per USDC</p>
-                    <p className="mt-2 text-3xl font-semibold">
-                      {formatPoolMetric(poolState.xu3o8PerUsdc, 6)}
-                    </p>
-                  </div>
-                  <div className="rounded-[24px] bg-black/20 p-4">
-                    <p className="text-sm text-white/45">Pool address</p>
-                    <p className="mt-2 break-all font-mono text-sm font-medium leading-6 text-white/75">
-                      {getDashboardPoolAddress() ?? (
-                        <span className="text-white/45">Set NEXT_PUBLIC_FEATURED_POOL_ADDRESS for this chain.</span>
-                      )}
-                    </p>
-                  </div>
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  {poolStates.map((pool) => (
+                    <div key={pool.key} className="rounded-[24px] bg-black/20 p-4">
+                      <p className="text-sm text-white/55">Pool</p>
+                      <h4 className="mt-1 text-lg font-semibold tracking-tight">{pool.label}</h4>
+
+                      <div className="mt-4 grid gap-3">
+                        <div className="rounded-[20px] bg-black/20 p-4">
+                          <p className="text-sm text-white/45">
+                            1 {pool.displayBaseSymbol} in {pool.displayQuoteSymbol}
+                          </p>
+                          <p className="mt-2 text-[2rem] font-semibold tracking-tight">
+                            {formatPoolMetric(pool.displayPrice, 4)}
+                          </p>
+                        </div>
+                        <div className="rounded-[20px] bg-black/20 p-4">
+                          <p className="text-sm text-white/45">Pool address</p>
+                          <p className="mt-2 break-all font-mono text-sm font-medium leading-6 text-white/75">
+                            {pool.poolAddress}
+                          </p>
+                        </div>
+                        <div className="rounded-[20px] bg-black/20 p-4">
+                          <p className="text-sm text-white/45">Current tokens in pool</p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-[18px] border border-white/8 bg-black/20 p-3">
+                              <p className="text-xs uppercase tracking-[0.18em] text-white/35">{pool.tokenA.symbol}</p>
+                              <p className="mt-2 text-xl font-semibold">
+                                {formatBalance(pool.tokenABalance, pool.tokenA.decimals, 4)}
+                              </p>
+                            </div>
+                            <div className="rounded-[18px] border border-white/8 bg-black/20 p-3">
+                              <p className="text-xs uppercase tracking-[0.18em] text-white/35">{pool.tokenB.symbol}</p>
+                              <p className="mt-2 text-xl font-semibold">
+                                {formatBalance(pool.tokenBBalance, pool.tokenB.decimals, 4)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {poolStates.length === 0 && (
+                    <div className="rounded-[24px] bg-black/20 p-4 text-sm text-white/45">
+                      Add pool addresses in `.env.local` to show them here.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -816,8 +949,15 @@ export default function Home() {
                 <p className="text-sm text-white/55">Liquidity</p>
                 <h3 className="mt-1 text-xl font-semibold tracking-tight">Add or create liquidity</h3>
                 <p className="mt-2 text-sm text-white/45">
-                  Pick two tokens (pools use a fixed 0.25% fee). If no pool exists yet, you can create one, set the starting
-                  price, and deposit the first liquidity in one flow.
+                  Pick two tokens (pools use a fixed 0.25% fee). If no pool exists yet, you can{" "}
+                  <button
+                    type="button"
+                    onClick={() => setActiveView("create")}
+                    className="font-semibold text-white underline decoration-white/30 underline-offset-2 hover:decoration-white/60"
+                  >
+                    create one
+                  </button>
+                  , set the starting price, and deposit the first liquidity in one flow.
                 </p>
 
                 <div className="mt-6">
@@ -845,7 +985,7 @@ export default function Home() {
                 <div className="w-full min-w-0 max-w-[560px] rounded-[30px] bg-[#191919] p-5">
                   <p className="text-sm text-white/55">Create Token</p>
                   <h3 className="mt-1 text-xl font-semibold tracking-tight">
-                    Deploy a new ERC-20 on {getConnectedChainDisplayName(wallet.chainId ?? TXPARK_CHAIN_ID)}
+                    Deploy a new ERC-20 on {dexChainConfig.networkDisplayName}
                   </h3>
                   <p className="mt-2 text-sm text-white/45">
                     Create a token from your connected wallet with configurable name, symbol, decimals, supply, and app
@@ -1021,9 +1161,9 @@ export default function Home() {
                 <p className="text-sm text-white/55">Faucet</p>
                 <h3 className="mt-1 text-xl font-semibold tracking-tight">Claim test tokens</h3>
                 <p className="mt-2 text-sm text-white/45">
-                  A connected wallet can receive an airdrop of <span className="text-white">5 USDC</span>,{" "}
-                  <span className="text-white">5 xU3O8</span>, and <span className="text-white">5 VNXAU</span> from the
-                  project faucet wallet.
+                  A connected wallet can receive an airdrop of <span className="font-semibold text-white">5 USDC</span>,{" "}
+                  <span className="font-semibold text-white">5 xU3O8</span>, and{" "}
+                  <span className="font-semibold text-white">5 VNXAU</span> from the project faucet wallet.
                 </p>
 
                 <div className="mt-6 rounded-[24px] border border-white/10 bg-black/20 p-4">

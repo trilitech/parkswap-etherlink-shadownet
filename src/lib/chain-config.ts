@@ -51,6 +51,8 @@ const DEFAULT_BLOCK_EXPLORER = "https://shadownet.explorer.etherlink.com";
 const DEFAULT_RPC = "https://node.shadownet.etherlink.com";
 
 const DEFAULT_FEATURED_POOL = "0x1c97bFFf8CCD5576a87C826f1845c0806Ac3Ae7E";
+const DEFAULT_POOL_USDC_XU3O8 = "0x1c97bFFf8CCD5576a87C826f1845c0806Ac3Ae7E";
+const DEFAULT_POOL_USDC_VNXAU = "0x613FF83eA2303f4226F188d796cbFFc9b2562506";
 
 export type DexChainErc20Meta = {
   address: `0x${string}`;
@@ -80,6 +82,13 @@ export type DexChainConfig = {
     xu3o8: DexChainErc20Meta;
     vnxau: DexChainErc20Meta | null;
   };
+  pools: Array<{
+    key: string;
+    label: string;
+    poolAddress: `0x${string}`;
+    tokenA: DexChainErc20Meta;
+    tokenB: DexChainErc20Meta;
+  }>;
   /** Optional pinned pool for dashboard price + `getFeaturedPool` shortcut; omit on new chains until deployed. */
   featuredPoolAddress: `0x${string}` | null;
 };
@@ -102,6 +111,56 @@ function buildDexChainConfig(): DexChainConfig {
   const featuredPool: `0x${string}` | null =
     explicitPool ?? (getAddress(DEFAULT_FEATURED_POOL) as `0x${string}`);
 
+  const usdcToken = {
+    address: parseAddressEnv("NEXT_PUBLIC_TOKEN_USDC_ADDRESS", DEFAULT_USDC),
+    symbol: envTrim("NEXT_PUBLIC_TOKEN_USDC_SYMBOL") ?? "USDC",
+    name: envTrim("NEXT_PUBLIC_TOKEN_USDC_NAME") ?? "USD Coin",
+    decimals: usdcDecimals,
+  } satisfies DexChainErc20Meta;
+
+  const xu3o8Token = {
+    address: parseAddressEnv("NEXT_PUBLIC_TOKEN_XU3O8_ADDRESS", DEFAULT_XU3O8),
+    symbol: envTrim("NEXT_PUBLIC_TOKEN_XU3O8_SYMBOL") ?? "xU3O8",
+    name: envTrim("NEXT_PUBLIC_TOKEN_XU3O8_NAME") ?? "xU3O8",
+    decimals: xu3o8Decimals,
+  } satisfies DexChainErc20Meta;
+
+  const vnxauToken = vnxauAddr
+    ? ({
+        address: vnxauAddr,
+        symbol: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_SYMBOL") ?? "VNXAU",
+        name: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_NAME") ?? "VNX Gold",
+        decimals: vnxauDecimals,
+      } satisfies DexChainErc20Meta)
+    : null;
+
+  const configuredPools: DexChainConfig["pools"] = [];
+  const poolUsdcXu3o8 =
+    parseOptionalAddressEnv("NEXT_PUBLIC_POOL_USDC_XU3O8_ADDRESS") ??
+    featuredPool ??
+    (getAddress(DEFAULT_POOL_USDC_XU3O8) as `0x${string}`);
+  if (poolUsdcXu3o8) {
+    configuredPools.push({
+      key: "usdc-xu3o8",
+      label: `${usdcToken.symbol} / ${xu3o8Token.symbol}`,
+      poolAddress: poolUsdcXu3o8,
+      tokenA: usdcToken,
+      tokenB: xu3o8Token,
+    });
+  }
+  const poolUsdcVnxau =
+    parseOptionalAddressEnv("NEXT_PUBLIC_POOL_USDC_VNXAU_ADDRESS") ??
+    (getAddress(DEFAULT_POOL_USDC_VNXAU) as `0x${string}`);
+  if (poolUsdcVnxau && vnxauToken) {
+    configuredPools.push({
+      key: "usdc-vnxau",
+      label: `${usdcToken.symbol} / ${vnxauToken.symbol}`,
+      poolAddress: poolUsdcVnxau,
+      tokenA: usdcToken,
+      tokenB: vnxauToken,
+    });
+  }
+
   return {
     chainId,
     chainIdHex,
@@ -121,27 +180,11 @@ function buildDexChainConfig(): DexChainConfig {
       factory: parseAddressEnv("NEXT_PUBLIC_V3_FACTORY_ADDRESS", DEFAULT_FACTORY),
     },
     tokens: {
-      usdc: {
-        address: parseAddressEnv("NEXT_PUBLIC_TOKEN_USDC_ADDRESS", DEFAULT_USDC),
-        symbol: envTrim("NEXT_PUBLIC_TOKEN_USDC_SYMBOL") ?? "USDC",
-        name: envTrim("NEXT_PUBLIC_TOKEN_USDC_NAME") ?? "USD Coin",
-        decimals: usdcDecimals,
-      },
-      xu3o8: {
-        address: parseAddressEnv("NEXT_PUBLIC_TOKEN_XU3O8_ADDRESS", DEFAULT_XU3O8),
-        symbol: envTrim("NEXT_PUBLIC_TOKEN_XU3O8_SYMBOL") ?? "xU3O8",
-        name: envTrim("NEXT_PUBLIC_TOKEN_XU3O8_NAME") ?? "xU3O8",
-        decimals: xu3o8Decimals,
-      },
-      vnxau: vnxauAddr
-        ? {
-            address: vnxauAddr,
-            symbol: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_SYMBOL") ?? "VNXAU",
-            name: envTrim("NEXT_PUBLIC_TOKEN_VNXAU_NAME") ?? "VNX Gold",
-            decimals: vnxauDecimals,
-          }
-        : null,
+      usdc: usdcToken,
+      xu3o8: xu3o8Token,
+      vnxau: vnxauToken,
     },
+    pools: configuredPools,
     featuredPoolAddress: featuredPool,
   };
 }

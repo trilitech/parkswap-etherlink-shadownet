@@ -14,7 +14,16 @@ export function AttributionBanner() {
           >
             IguanaDEX
           </a>{" "}
-          on Etherlink Shadownet.
+          on{" "}
+          <a
+            href={ATTRIBUTION_READ_MORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-etherlink no-underline hover:text-[#5febdb]"
+          >
+            Etherlink Shadownet
+          </a>
+          .
         </p>
         <a
           href={ATTRIBUTION_READ_MORE_URL}

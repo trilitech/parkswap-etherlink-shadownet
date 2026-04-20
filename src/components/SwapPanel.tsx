@@ -107,11 +107,10 @@ export function SwapPanel({
 }: Props) {
   const [tokenInKey, setTokenInKey] = useState<string>(DEFAULT_SWAP_TOKEN_IN);
   const [tokenOutKey, setTokenOutKey] = useState<string>(DEFAULT_SWAP_TOKEN_OUT);
-  const [swapAmount, setSwapAmount] = useState("100");
+  const [swapAmount, setSwapAmount] = useState("1");
   const [recentKeys, setRecentKeys] = useState<string[]>([]);
 
   const [poolAddress, setPoolAddress] = useState<string | null>(null);
-  const [poolLoading, setPoolLoading] = useState(false);
   const [sqrtPriceX96, setSqrtPriceX96] = useState<bigint | null>(null);
 
   const [quote, setQuote] = useState<{ amountOut: string | null; error: string | null }>({ amountOut: null, error: null });
@@ -222,15 +221,12 @@ export function SwapPanel({
       setSqrtPriceX96(null);
       return;
     }
-    setPoolLoading(true);
     try {
       const addr = await resolvePoolAddress(publicProvider, tokenIn.address, tokenOut.address, DEFAULT_FEE_TIER);
       setPoolAddress(addr);
     } catch {
       setPoolAddress(null);
       setSqrtPriceX96(null);
-    } finally {
-      setPoolLoading(false);
     }
   }, [tokenIn, tokenOut]);
 
@@ -454,13 +450,6 @@ export function SwapPanel({
     return "—";
   }, [tokenIn, tokenOut, swapAmount, quote.amountOut, midOutPerIn]);
 
-  const priceLine =
-    midOutPerIn != null && tokenIn && tokenOut
-      ? `1 ${tokenIn.symbol} ≈ ${midOutPerIn.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${tokenOut.symbol}`
-      : poolLoading
-        ? "Loading…"
-        : "—";
-
   return (
     <>
       <div className="rounded-[30px] bg-[#191919] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
@@ -518,11 +507,15 @@ export function SwapPanel({
                 {quote.amountOut ? Number(quote.amountOut).toLocaleString(undefined, { maximumFractionDigits: 6 }) : "0.0"}
               </div>
               <div className="mt-2 text-sm text-white/35">
-                {quote.amountOut && tokenOut
-                  ? `≈ ${Number(quote.amountOut).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${tokenOut.symbol}`
-                  : tokenOut
-                    ? `0 ${tokenOut.symbol}`
-                    : "—"}
+                {quote.error && swapInputParsed ? (
+                  <span className="text-amber-300/90">{quote.error}</span>
+                ) : quote.amountOut && tokenOut ? (
+                  `≈ ${Number(quote.amountOut).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${tokenOut.symbol}`
+                ) : tokenOut ? (
+                  `0 ${tokenOut.symbol}`
+                ) : (
+                  "—"
+                )}
               </div>
             </div>
             {tokenOut ? (
@@ -541,23 +534,8 @@ export function SwapPanel({
           </div>
         </div>
 
-        <div className="mt-3 space-y-3 rounded-[22px] bg-[#151515] px-4 py-3 text-sm text-white/60">
-          {poolExists ? (
-            <div>
-              <div className="flex items-center justify-between gap-2 text-white/60">
-                <span>Price</span>
-                <span className="text-right text-white/85">{priceLine}</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-2 text-white/60">
-                <span>Quote</span>
-                <span className="text-right text-white/85">
-                  {quote.amountOut && tokenOut
-                    ? `${Number(quote.amountOut).toLocaleString(undefined, { maximumFractionDigits: 8 })} ${tokenOut.symbol}`
-                    : quote.error ?? (swapInputParsed ? "—" : "Enter amount")}
-                </span>
-              </div>
-            </div>
-          ) : (
+        {!poolExists ? (
+          <div className="mt-3 space-y-3 rounded-[22px] bg-[#151515] px-4 py-3 text-sm text-white/60">
             <div className="text-red-300/90">
               <p className="font-medium">No pool</p>
               <p className="mt-1 text-sm text-white/55">No pool exists for this pair at the 0.25% fee tier.</p>
@@ -574,8 +552,8 @@ export function SwapPanel({
                   : "Create pool"}
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {poolExists && needsSwapApproval ? (
           <button

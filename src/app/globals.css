@@ -11,6 +11,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /** Matches hero gradient accent; Etherlink-style mint/teal for branded links. */
+  --color-etherlink: #49e3ce;
   --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   --font-mono: "SFMono-Regular", "Menlo", "Monaco", monospace;
 }

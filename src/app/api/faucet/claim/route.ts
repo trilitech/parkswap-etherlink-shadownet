@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid wallet address." }, { status: 400 });
     }
 
-    const rpcUrl = envTrim("FAUCET_RPC_URL") ?? envTrim("NEXT_PUBLIC_RPC_URL") ?? TXPARK_RPC_URL;
+    const rpcUrl = envTrim("NEXT_PUBLIC_RPC_URL") ?? TXPARK_RPC_URL;
     const privateKey = toHexPrivateKey(requireOneOfServerEnv("FAUCET_PRIVATE_KEY", "PRIVATE_KEY"));
 
     const provider = new JsonRpcProvider(rpcUrl);
