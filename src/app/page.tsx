@@ -137,6 +137,10 @@ function shortenTxHash(hash: string) {
   return `${hash.slice(0, 10)}…${hash.slice(-8)}`;
 }
 
+function shortenTokenAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 function formatBalance(value: bigint | null, decimals: number, fractionDigits = 4) {
   if (value === null) return "0";
   const formatted = Number(formatUnits(value, decimals));
@@ -873,6 +877,9 @@ export default function Home() {
                           <div className="min-w-0">
                             <p className="text-base font-semibold">{token.symbol}</p>
                             <p className="text-sm text-white/45">{token.name}</p>
+                            <p className="mt-1 font-mono text-[11px] text-white/35">
+                              {shortenTokenAddress(token.address)} • {token.decimals} decimals
+                            </p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -1106,6 +1113,9 @@ export default function Home() {
                         {recentlyDeployedToken.symbol}
                       </p>
                       <p className="mt-1 text-sm text-emerald-50/85">{recentlyDeployedToken.name}</p>
+                      <p className="mt-1 font-mono text-xs text-emerald-100/70">
+                        {shortenTokenAddress(recentlyDeployedToken.address)} • {recentlyDeployedToken.decimals} decimals
+                      </p>
                       <a
                         href={txparkExplorerAddressUrl(recentlyDeployedToken.address)}
                         target="_blank"
@@ -1229,8 +1239,11 @@ export default function Home() {
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-white/90">{token.symbol}</p>
                             <p className="text-white/60">{token.name}</p>
+                            <p className="mt-1 font-mono text-[11px] text-white/45">
+                              {shortenTokenAddress(token.address)} • {token.decimals} decimals
+                            </p>
                             <p className="mt-2 text-xs text-white/45">
-                              {token.supply} supply · {token.decimals} decimals ·{" "}
+                              {token.supply} supply ·{" "}
                               <span className="font-mono text-white/50">{token.iconName}</span>
                             </p>
                             <a

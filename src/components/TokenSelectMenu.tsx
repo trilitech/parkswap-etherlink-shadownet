@@ -18,6 +18,10 @@ export function TokenSelectMenu({ label, tokens, value, onChange }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const selected = tokens.find((t) => t.key === value) ?? (tokens.length > 0 ? tokens[0] : undefined);
+  const symbolCounts = new Map<string, number>();
+  for (const token of tokens) {
+    symbolCounts.set(token.symbol, (symbolCounts.get(token.symbol) ?? 0) + 1);
+  }
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -54,7 +58,10 @@ export function TokenSelectMenu({ label, tokens, value, onChange }: Props) {
               <>
                 <TokenIconGlyph tokenKey={selected.key} symbol={selected.symbol} address={selected.address} tone="dark" size="sm" />
                 <span className="min-w-0 truncate">
-                  <span className="font-medium">{selected.symbol}</span>
+                  <span className="font-medium">
+                    {selected.symbol}
+                    {symbolCounts.get(selected.symbol)! > 1 ? ` (${selected.decimals}d)` : ""}
+                  </span>
                   <span className="text-white/45"> — {selected.name}</span>
                 </span>
               </>
@@ -91,8 +98,14 @@ export function TokenSelectMenu({ label, tokens, value, onChange }: Props) {
                   >
                     <TokenIconGlyph tokenKey={t.key} symbol={t.symbol} address={t.address} tone="dark" size="sm" />
                     <span className="flex min-w-0 flex-col items-start gap-0.5">
-                      <span className="font-medium">{t.symbol}</span>
+                      <span className="font-medium">
+                        {t.symbol}
+                        {symbolCounts.get(t.symbol)! > 1 ? ` (${t.decimals}d)` : ""}
+                      </span>
                       <span className="text-xs text-white/45">{t.name}</span>
+                      <span className="font-mono text-[11px] text-white/35">
+                        {`${t.address.slice(0, 6)}...${t.address.slice(-4)} • ${t.decimals} decimals`}
+                      </span>
                     </span>
                   </button>
                 </li>

@@ -127,6 +127,9 @@ export function ImportTokenModal({
               <p>
                 <span className="text-white/40">Decimals:</span> {preview.token.decimals}
               </p>
+              <p className="font-mono text-xs text-white/45">
+                {`${preview.token.address.slice(0, 6)}...${preview.token.address.slice(-4)} • ${preview.token.decimals} decimals`}
+              </p>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-white/40">Address:</span>
                 <code className="rounded bg-white/5 px-2 py-1 text-xs text-white/85">{preview.token.address}</code>

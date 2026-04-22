@@ -44,6 +44,10 @@ export function SwapTokenSelect({
 
   const selected =
     registry.find((t) => t.key === valueKey) ?? featured[0] ?? yourTokens[0] ?? recentTokens[0] ?? registry[0];
+  const symbolCounts = new Map<string, number>();
+  for (const token of registry) {
+    symbolCounts.set(token.symbol, (symbolCounts.get(token.symbol) ?? 0) + 1);
+  }
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -91,8 +95,14 @@ export function SwapTokenSelect({
         >
           <TokenIconGlyph tokenKey={t.key} symbol={t.symbol} address={t.address} tone="dark" />
           <span className="min-w-0 flex-1">
-            <span className="block font-medium">{t.symbol}</span>
+            <span className="block font-medium">
+              {t.symbol}
+              {symbolCounts.get(t.symbol)! > 1 ? ` (${t.decimals}d)` : ""}
+            </span>
             <span className="block truncate text-xs text-white/45">{t.name}</span>
+            <span className="block truncate font-mono text-[11px] text-white/35">
+              {`${t.address.slice(0, 6)}...${t.address.slice(-4)} • ${t.decimals} decimals`}
+            </span>
           </span>
         </button>
       </li>
